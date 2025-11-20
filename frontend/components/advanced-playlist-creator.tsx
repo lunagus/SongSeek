@@ -513,7 +513,7 @@ export default function AdvancedPlaylistCreator({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-blue-50 dark:from-gray-800 dark:to-gray-800 rounded-xl border border-green-100/70 dark:border-gray-700/80">
                       <div className="space-y-1">
                         <Label className="text-base font-medium text-gray-900 dark:text-gray-100">
                           Enable Batch Mode
@@ -526,7 +526,7 @@ export default function AdvancedPlaylistCreator({
                     </div>
 
                     {showBatchUpload && (
-                      <div className="space-y-4 p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border">
+                      <div className="space-y-4 p-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-800 rounded-xl border border-blue-100/70 dark:border-gray-700/80">
                         <Label className="text-base font-medium">Playlist URLs (one per line)</Label>
                         <Textarea
                           placeholder={`https://open.spotify.com/playlist/...
@@ -560,7 +560,7 @@ https://music.youtube.com/playlist/...`}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border">
+                    <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-800 dark:to-gray-800 rounded-xl border border-purple-100/70 dark:border-gray-700/80">
                       <div className="flex items-start justify-between">
                         <div className="space-y-2">
                           <Label className="text-base font-medium text-gray-900 dark:text-gray-100">
@@ -897,7 +897,7 @@ https://music.youtube.com/playlist/...`}
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-6">
-                      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border">
+                      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-gray-800 dark:to-gray-800 rounded-xl border border-purple-100/70 dark:border-gray-700/80">
                         <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
                           <Music className="h-6 w-6 text-white" />
                         </div>
@@ -944,9 +944,9 @@ https://music.youtube.com/playlist/...`}
               {/* Actions and Summary - Takes 1 column */}
               <div className="space-y-6">
                 {/* Transfer Actions */}
-                <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+                <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-3 text-xl">
+                    <CardTitle className="flex items-center gap-3 text-xl text-gray-900 dark:text-gray-100">
                       <div className="p-2 bg-blue-100 rounded-lg">
                         <ExternalLink className="h-5 w-5 text-blue-600" />
                       </div>
@@ -978,7 +978,7 @@ https://music.youtube.com/playlist/...`}
                       </p>
                     )}
 
-                    <Separator />
+                    <Separator className="bg-gray-200 dark:bg-gray-700" />
 
                     {/* Export Options */}
                     <div className="space-y-3">
@@ -1073,9 +1073,9 @@ https://music.youtube.com/playlist/...`}
                 </Card>
 
                 {/* Social Sharing */}
-                <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+                <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-3 text-xl">
+                    <CardTitle className="flex items-center gap-3 text-xl text-gray-900 dark:text-gray-100">
                       <div className="p-2 bg-pink-100 rounded-lg">
                         <Users className="h-5 w-5 text-pink-600" />
                       </div>
