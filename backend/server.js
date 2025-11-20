@@ -73,7 +73,7 @@ import { convertYouTubeToSpotifyPlaylist } from './mappers/youtube-to-spotify-pl
 dotenv.config();
 
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 8080;
 
 const userSessions = new Map(); // key = sessionId (state), value = { accessToken, refreshToken }
 const progressMap = new Map(); // key = sessionId, value = { total, current, stage, error }
