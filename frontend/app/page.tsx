@@ -789,7 +789,10 @@ export default function SongSeekApp() {
       showDetailedFeedback("login_expired", playlistTarget, false);
       return;
     }
+    // Reset any previous conversion results before starting a new conversion
     setFeedback("");
+    setShowResults(false);
+    setConversionResults(null);
     setIsConverting(true);
     setShowProgress(true); // Always show progress modal
 
@@ -1057,19 +1060,23 @@ export default function SongSeekApp() {
               sourcePlatform,
             )}&target=${encodeURIComponent(playlistTarget)}`,
           )
+
+          toast({
+            title: "Conversion Successful! 🎉",
+            description: "Opening advanced editor to review and fine-tune your playlist.",
+          });
         } else {
           setCurrentSession(sessionToUse);
           const results = await getConversionResults(sessionToUse);
           setConversionResults(results);
           console.log('[DEBUG] setConversionResults for session', sessionToUse, results);
           setShowResults(true);
-        }
 
-        // Show success message
-        toast({
-          title: "Conversion Successful! 🎉",
-          description: "Review your conversion results below.",
-        });
+          toast({
+            title: "Conversion Successful! 🎉",
+            description: "Review your conversion results below.",
+          });
+        }
       } else {
         throw new Error("Conversion failed: No success response received");
       }

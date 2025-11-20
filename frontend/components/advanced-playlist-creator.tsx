@@ -48,7 +48,7 @@ import {
   FileSpreadsheet,
   FileType,
 } from "lucide-react"
-import { getConversionResults, searchTracks } from "@/lib/api"
+import { getConversionResults, searchTracks, applyPlaylistFixes } from "@/lib/api"
 
 interface AdvancedPlaylistCreatorProps {
   session: string
@@ -92,6 +92,8 @@ export default function AdvancedPlaylistCreator({
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [exportType, setExportType] = useState<"failed" | "missing" | "all">("failed")
   const [isLoading, setIsLoading] = useState(true)
+  const [playlistUrl, setPlaylistUrl] = useState<string | null>(null)
+  const [isApplyingFixes, setIsApplyingFixes] = useState(false)
 
   useEffect(() => {
     const loadConversionResults = async () => {
@@ -118,6 +120,7 @@ export default function AdvancedPlaylistCreator({
               : 0,
           status: t.status || (t.found === false ? "not_found" : "matched"),
           isDuplicate: false,
+          replacement: null,
         }))
 
         setSongs(mappedSongs)
@@ -125,6 +128,10 @@ export default function AdvancedPlaylistCreator({
 
         if (results.playlistName && !initialPlaylistName) {
           setPlaylistName(results.playlistName)
+        }
+
+        if (results.playlistUrl) {
+          setPlaylistUrl(results.playlistUrl)
         }
       } catch (error) {
         console.error("Failed to load conversion results:", error)
@@ -195,6 +202,7 @@ export default function AdvancedPlaylistCreator({
               duration: newSong.duration,
               matchConfidence: newSong.confidence,
               status: "matched",
+              replacement: newSong,
             }
           : song,
       ),
@@ -288,9 +296,46 @@ export default function AdvancedPlaylistCreator({
     setExportModalOpen(false)
   }
 
+  const handleStartTransfer = async () => {
+    if (!playlistUrl) {
+      console.error("No playlistUrl from conversion results; cannot apply fixes.")
+      return
+    }
+
+    const replacements = songs
+      .filter((song) => song.replacement)
+      .map((song) => ({
+        originalTrack: {
+          title: song.title,
+          artist: song.artist,
+        },
+        newTrack: {
+          id: song.replacement.id,
+          title: song.replacement.title,
+          artist: song.replacement.artist,
+        },
+        skip: false,
+      }))
+
+    if (replacements.length === 0) {
+      console.log("No manual replacements to apply.")
+      return
+    }
+
+    try {
+      setIsApplyingFixes(true)
+      const response = await applyPlaylistFixes(session, playlistUrl, replacements)
+      console.log("Apply playlist fixes result:", response)
+    } catch (error) {
+      console.error("Failed to apply playlist fixes:", error)
+    } finally {
+      setIsApplyingFixes(false)
+    }
+  }
+
   const shareToSocial = (platform: string) => {
     const successRate =
-      Math.round((selectedSongs.filter((song) => song.status === "matched").length / selectedSongs.length) * 100) || 0
+      Math.round((selectedSongsList.filter((song) => song.status === "matched").length / selectedSongsList.length) * 100) || 0
     const text = `Just transferred my "${playlistName}" playlist with ${successRate}% success rate using SongSeek! 🎵`
     const url = window.location.href
 
@@ -359,8 +404,8 @@ export default function AdvancedPlaylistCreator({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="container mx-auto p-6 max-w-7xl">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors duration-300">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 max-w-6xl">
         {/* Header Section */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-8 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
@@ -369,7 +414,7 @@ export default function AdvancedPlaylistCreator({
         </div>
 
         <Tabs defaultValue="settings" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-3 h-14 p-1 bg-white shadow-sm">
+          <TabsList className="grid w-full grid-cols-3 h-14 p-1 bg-white/90 dark:bg-gray-900/80 shadow-sm rounded-xl">
             <TabsTrigger value="settings" className="text-base font-medium">
               Transfer Settings
             </TabsTrigger>
@@ -386,20 +431,22 @@ export default function AdvancedPlaylistCreator({
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
               {/* Playlist Information - Takes 2 columns */}
               <div className="xl:col-span-2 space-y-6">
-                <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+                <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-3 text-xl">
+                    <CardTitle className="flex items-center gap-3 text-xl text-gray-900 dark:text-gray-100">
                       <div className="p-2 bg-blue-100 rounded-lg">
                         <Settings className="h-5 w-5 text-blue-600" />
                       </div>
                       Playlist Information
                     </CardTitle>
-                    <CardDescription className="text-base">Configure your transferred playlist details</CardDescription>
+                    <CardDescription className="text-base text-gray-600 dark:text-gray-300">
+                      Configure your transferred playlist details
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-3">
-                        <Label htmlFor="playlist-name" className="text-base font-medium">
+                        <Label htmlFor="playlist-name" className="text-base font-medium text-gray-900 dark:text-gray-100">
                           Playlist Name
                         </Label>
                         <Input
@@ -411,7 +458,7 @@ export default function AdvancedPlaylistCreator({
                         />
                       </div>
                       <div className="space-y-3">
-                        <Label htmlFor="target-platform" className="text-base font-medium">
+                        <Label htmlFor="target-platform" className="text-base font-medium text-gray-900 dark:text-gray-100">
                           Target Platform
                         </Label>
                         <Select value={targetPlatform} onValueChange={setTargetPlatform}>
@@ -430,7 +477,10 @@ export default function AdvancedPlaylistCreator({
                       </div>
                     </div>
                     <div className="space-y-3">
-                      <Label htmlFor="playlist-description" className="text-base font-medium">
+                      <Label
+                        htmlFor="playlist-description"
+                        className="text-base font-medium text-gray-900 dark:text-gray-100"
+                      >
                         Description
                       </Label>
                       <Textarea
@@ -446,23 +496,27 @@ export default function AdvancedPlaylistCreator({
                 </Card>
 
                 {/* Batch Processing */}
-                <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+                <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-3 text-xl">
+                    <CardTitle className="flex items-center gap-3 text-xl text-gray-900 dark:text-gray-100">
                       <div className="p-2 bg-green-100 rounded-lg">
                         <Upload className="h-5 w-5 text-green-600" />
                       </div>
                       Batch Processing
                     </CardTitle>
-                    <CardDescription className="text-base">
+                    <CardDescription className="text-base text-gray-600 dark:text-gray-300">
                       Upload multiple playlists at once for batch conversion
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl">
                       <div className="space-y-1">
-                        <Label className="text-base font-medium">Enable Batch Mode</Label>
-                        <p className="text-sm text-muted-foreground">Process multiple playlist URLs simultaneously</p>
+                        <Label className="text-base font-medium text-gray-900 dark:text-gray-100">
+                          Enable Batch Mode
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Process multiple playlist URLs simultaneously
+                        </p>
                       </div>
                       <Switch checked={showBatchUpload} onCheckedChange={setShowBatchUpload} />
                     </div>
@@ -489,15 +543,15 @@ https://music.youtube.com/playlist/...`}
 
               {/* Privacy Settings - Takes 1 column */}
               <div className="space-y-6">
-                <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+                <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-3 text-xl">
+                    <CardTitle className="flex items-center gap-3 text-xl text-gray-900 dark:text-gray-100">
                       <div className="p-2 bg-purple-100 rounded-lg">
                         <Globe className="h-5 w-5 text-purple-600" />
                       </div>
                       Privacy Settings
                     </CardTitle>
-                    <CardDescription className="text-base">
+                    <CardDescription className="text-base text-gray-600 dark:text-gray-300">
                       Control playlist visibility on the target platform
                     </CardDescription>
                   </CardHeader>
@@ -505,8 +559,10 @@ https://music.youtube.com/playlist/...`}
                     <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border">
                       <div className="flex items-start justify-between">
                         <div className="space-y-2">
-                          <Label className="text-base font-medium">Playlist Visibility</Label>
-                          <p className="text-sm text-muted-foreground leading-relaxed">
+                          <Label className="text-base font-medium text-gray-900 dark:text-gray-100">
+                            Playlist Visibility
+                          </Label>
+                          <p className="text-sm text-muted-foreground dark:text-gray-500 leading-relaxed">
                             {isPublic
                               ? "Anyone can find and listen to this playlist"
                               : "Only you can access this playlist"}
@@ -529,17 +585,17 @@ https://music.youtube.com/playlist/...`}
           </TabsContent>
 
           <TabsContent value="songs" className="space-y-8">
-            <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+            <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
               <CardHeader className="pb-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-3 text-2xl">
+                    <CardTitle className="flex items-center gap-3 text-2xl text-gray-900 dark:text-gray-100">
                       <div className="p-2 bg-blue-100 rounded-lg">
                         <Music className="h-6 w-6 text-blue-600" />
                       </div>
                       Song Management
                     </CardTitle>
-                    <CardDescription className="text-base mt-2">
+                    <CardDescription className="text-base mt-2 text-gray-600 dark:text-gray-300">
                       Review, reorder, and fix song matches before transfer
                     </CardDescription>
                   </div>
@@ -555,7 +611,7 @@ https://music.youtube.com/playlist/...`}
               </CardHeader>
               <CardContent className="space-y-8">
                 {/* Enhanced Statistics Dashboard */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-6 bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 rounded-2xl border">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-6 bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-2xl border border-gray-200/70 dark:border-gray-700/70">
                   <div className="text-center">
                     <div className="text-3xl font-bold text-green-600 mb-1">{matchedSongs}</div>
                     <div className="text-sm font-medium text-muted-foreground">Matched</div>
@@ -790,7 +846,22 @@ https://music.youtube.com/playlist/...`}
                                 value={customSearchQuery}
                                 onChange={(e) => setCustomSearchQuery(e.target.value)}
                               />
-                              <Button size="sm" variant="outline" className="h-10 px-6 bg-transparent">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-10 px-6 bg-transparent"
+                                onClick={async () => {
+                                  if (!customSearchQuery.trim()) return
+                                  try {
+                                    const apiPlatform = mapTargetPlatformToApi(targetPlatform)
+                                    const results = await searchTracks(apiPlatform, customSearchQuery.trim(), 5, session)
+                                    setSearchResults(results || [])
+                                  } catch (error) {
+                                    console.error("Failed to search alternative matches:", error)
+                                    setSearchResults([])
+                                  }
+                                }}
+                              >
                                 <Search className="h-4 w-4" />
                               </Button>
                             </div>
@@ -808,15 +879,17 @@ https://music.youtube.com/playlist/...`}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Preview Section - Takes 2 columns */}
               <div className="lg:col-span-2">
-                <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+                <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                   <CardHeader className="pb-6">
-                    <CardTitle className="flex items-center gap-3 text-2xl">
+                    <CardTitle className="flex items-center gap-3 text-2xl text-gray-900 dark:text-gray-100">
                       <div className="p-2 bg-green-100 rounded-lg">
                         <Eye className="h-6 w-6 text-green-600" />
                       </div>
                       Transfer Preview
                     </CardTitle>
-                    <CardDescription className="text-base">Review your playlist before transferring</CardDescription>
+                    <CardDescription className="text-base text-gray-600 dark:text-gray-300">
+                      Review your playlist before transferring
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-6">
@@ -880,7 +953,8 @@ https://music.youtube.com/playlist/...`}
                     <div className="relative">
                       <Button
                         className="w-full h-16 text-lg font-bold bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 hover:from-green-600 hover:via-blue-600 hover:to-purple-600 text-white shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border-0"
-                        disabled={notFoundSongs > 0}
+                        disabled={notFoundSongs > 0 || isApplyingFixes}
+                        onClick={handleStartTransfer}
                       >
                         <div className="flex items-center justify-center gap-3">
                           <div className="p-2 bg-white/20 rounded-full">
@@ -1029,9 +1103,9 @@ https://music.youtube.com/playlist/...`}
                 </Card>
 
                 {/* Transfer Summary */}
-                <Card className="shadow-sm border-0 bg-white/80 backdrop-blur">
+                <Card className="shadow-sm border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="text-xl">Transfer Summary</CardTitle>
+                    <CardTitle className="text-xl text-gray-900 dark:text-gray-100">Transfer Summary</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">

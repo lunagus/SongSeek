@@ -1502,6 +1502,227 @@ app.get('/api/check-session', (req, res) => {
   }
 });
 
+// Spotify account export (playlists + saved tracks)
+app.get('/spotify/export-account', async (req, res) => {
+  const { session } = req.query;
+  if (!session) {
+    return res.status(400).json({ error: 'Missing session parameter' });
+  }
+
+  const user = userSessions.get(session);
+  if (!user?.accessToken) {
+    return res.status(401).json({ error: 'Spotify session not found or expired' });
+  }
+
+  const accessToken = user.accessToken;
+
+  async function spotifyGet(url) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Spotify GET ${url} failed: ${response.status} ${text}`);
+    }
+    return response.json();
+  }
+
+  try {
+    const me = await spotifyGet('https://api.spotify.com/v1/me');
+
+    // Fetch all playlists (paginated)
+    const playlists = [];
+    let playlistsUrl = 'https://api.spotify.com/v1/me/playlists?limit=50';
+    while (playlistsUrl) {
+      const page = await spotifyGet(playlistsUrl);
+      if (Array.isArray(page.items)) playlists.push(...page.items);
+      playlistsUrl = page.next;
+    }
+
+    // Fetch tracks for each playlist
+    const playlistsWithTracks = [];
+    for (const p of playlists) {
+      const tracks = [];
+      let tracksUrl = `https://api.spotify.com/v1/playlists/${p.id}/tracks?limit=100`;
+      while (tracksUrl) {
+        const page = await spotifyGet(tracksUrl);
+        if (Array.isArray(page.items)) {
+          for (const item of page.items) {
+            const t = item.track;
+            if (!t) continue;
+            tracks.push({
+              id: t.id,
+              name: t.name,
+              artists: (t.artists || []).map((a) => a.name),
+              album: t.album?.name,
+            });
+          }
+        }
+        tracksUrl = page.next;
+      }
+      playlistsWithTracks.push({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        public: p.public,
+        collaborative: p.collaborative,
+        tracks,
+      });
+    }
+
+    // Fetch saved tracks (paginated)
+    const savedTracks = [];
+    let savedUrl = 'https://api.spotify.com/v1/me/tracks?limit=50';
+    while (savedUrl) {
+      const page = await spotifyGet(savedUrl);
+      if (Array.isArray(page.items)) {
+        for (const item of page.items) {
+          const t = item.track;
+          if (!t) continue;
+          savedTracks.push({
+            id: t.id,
+            name: t.name,
+            artists: (t.artists || []).map((a) => a.name),
+            album: t.album?.name,
+          });
+        }
+      }
+      savedUrl = page.next;
+    }
+
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      user: {
+        id: me.id,
+        display_name: me.display_name,
+        email: me.email,
+        country: me.country,
+      },
+      playlists: playlistsWithTracks,
+      savedTracks,
+    };
+
+    res.json(backup);
+  } catch (err) {
+    console.error('Spotify export-account error:', err);
+    res.status(500).json({ error: 'Failed to export Spotify account', message: err.message });
+  }
+});
+
+// Spotify account import (create playlists + saved tracks)
+app.post('/spotify/import-account', async (req, res) => {
+  const { session } = req.query;
+  if (!session) {
+    return res.status(400).json({ error: 'Missing session parameter' });
+  }
+
+  const user = userSessions.get(session);
+  if (!user?.accessToken) {
+    return res.status(401).json({ error: 'Spotify session not found or expired' });
+  }
+
+  const accessToken = user.accessToken;
+  const backup = req.body;
+  if (!backup || typeof backup !== 'object') {
+    return res.status(400).json({ error: 'Missing or invalid backup JSON in request body' });
+  }
+
+  async function spotifyGet(url) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Spotify GET ${url} failed: ${response.status} ${text}`);
+    }
+    return response.json();
+  }
+
+  async function spotifyPost(url, body) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Spotify POST ${url} failed: ${response.status} ${text}`);
+    }
+    return response.json();
+  }
+
+  async function spotifyPut(url, body) {
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Spotify PUT ${url} failed: ${response.status} ${text}`);
+    }
+    if (response.status === 204) return null;
+    return response.json();
+  }
+
+  try {
+    const me = await spotifyGet('https://api.spotify.com/v1/me');
+
+    let playlistsImported = 0;
+    let savedTracksImported = 0;
+
+    const playlists = Array.isArray(backup.playlists) ? backup.playlists : [];
+    for (const p of playlists) {
+      const created = await spotifyPost(`https://api.spotify.com/v1/users/${me.id}/playlists`, {
+        name: p.name || 'Imported playlist',
+        description: p.description || 'Imported with SongSeek',
+        public: typeof p.public === 'boolean' ? p.public : false,
+        collaborative: !!p.collaborative,
+      });
+
+      const trackIds = (p.tracks || [])
+        .map((t) => t.id)
+        .filter(Boolean);
+
+      for (let i = 0; i < trackIds.length; i += 100) {
+        const chunk = trackIds.slice(i, i + 100);
+        if (chunk.length === 0) continue;
+        await spotifyPost(`https://api.spotify.com/v1/playlists/${created.id}/tracks`, {
+          uris: chunk.map((id) => `spotify:track:${id}`),
+        });
+      }
+
+      playlistsImported += 1;
+    }
+
+    const savedTracks = Array.isArray(backup.savedTracks) ? backup.savedTracks : [];
+    const savedIds = savedTracks.map((t) => t.id).filter(Boolean);
+    for (let i = 0; i < savedIds.length; i += 50) {
+      const chunk = savedIds.slice(i, i + 50);
+      if (chunk.length === 0) continue;
+      await spotifyPut('https://api.spotify.com/v1/me/tracks', {
+        ids: chunk,
+      });
+      savedTracksImported += chunk.length;
+    }
+
+    res.json({
+      success: true,
+      playlistsImported,
+      savedTracksImported,
+    });
+  } catch (err) {
+    console.error('Spotify import-account error:', err);
+    res.status(500).json({ error: 'Failed to import Spotify account', message: err.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`✅ Listening on http://localhost:${port}`);
 });
