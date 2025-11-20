@@ -98,9 +98,17 @@ app.use((req, res, next) => {
     'http://127.0.0.1:3000',
   ];
 
-  if (origin && allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+  let allowed = false;
+
+  if (origin) {
+    if (allowedOrigins.includes(origin) || origin.includes('songseek.vercel.app')) {
+      res.header('Access-Control-Allow-Origin', origin);
+      allowed = true;
+    }
   }
+
+  // Debug CORS decisions in production to diagnose issues like blocked import/export
+  console.log('[CORS] Origin:', origin, 'Allowed:', allowed);
 
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
