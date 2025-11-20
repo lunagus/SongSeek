@@ -324,7 +324,11 @@ export default function AdvancedPlaylistCreator({
 
     try {
       setIsApplyingFixes(true)
-      const response = await applyPlaylistFixes(session, playlistUrl, replacements)
+      const response = await applyPlaylistFixes(session, playlistUrl, replacements, {
+        playlistName,
+        playlistDescription: playlistDescription || undefined,
+        isPublic,
+      })
       console.log("Apply playlist fixes result:", response)
     } catch (error) {
       console.error("Failed to apply playlist fixes:", error)

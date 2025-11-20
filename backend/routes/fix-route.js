@@ -4,7 +4,7 @@ const router = express.Router();
 
 // POST /fix-playlist-tracks
 router.post('/fix-playlist-tracks', async (req, res) => {
-  const { session, playlistUrl, replacements } = req.body;
+  const { session, playlistUrl, replacements, playlistName, playlistDescription, isPublic } = req.body;
   
   // Debug logging
   console.log('[DEBUG] fix-playlist-tracks received session:', session);
@@ -34,6 +34,36 @@ router.post('/fix-playlist-tracks', async (req, res) => {
   }
   const playlistId = match[1];
   console.log('[DEBUG] Extracted playlist ID:', playlistId);
+
+  // Optionally update playlist metadata (name / description / public) if provided
+  try {
+    const updatePayload = {};
+    if (playlistName) updatePayload.name = playlistName;
+    if (typeof isPublic === 'boolean') updatePayload.public = isPublic;
+    if (typeof playlistDescription === 'string') updatePayload.description = playlistDescription;
+
+    if (Object.keys(updatePayload).length > 0) {
+      console.log('[DEBUG] Updating playlist metadata with payload:', updatePayload);
+      const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${user.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatePayload),
+      });
+
+      if (!metaRes.ok) {
+        const text = await metaRes.text();
+        console.log('[DEBUG] Failed to update playlist metadata:', metaRes.status, text);
+      } else {
+        console.log('[DEBUG] Successfully updated playlist metadata');
+      }
+    }
+  } catch (err) {
+    console.log('[DEBUG] Error updating playlist metadata:', err.message);
+    // Continue with track fixes even if metadata update fails
+  }
   
   let successful = 0;
   let failed = 0;

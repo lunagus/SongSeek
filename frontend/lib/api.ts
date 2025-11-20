@@ -159,10 +159,15 @@ export async function searchAllPlatforms(query: string, limit: number = 5, sessi
 }
 
 // Manual fix functionality
-export async function applyPlaylistFixes(session: string, playlistUrl: string, replacements: any[]) {
+export async function applyPlaylistFixes(
+  session: string,
+  playlistUrl: string,
+  replacements: any[],
+  options?: { playlistName?: string; playlistDescription?: string; isPublic?: boolean }
+) {
   const url = `${API_BASE_URL}/fix/fix-playlist-tracks`;
   console.log('[DEBUG] applyPlaylistFixes: sending request to', url);
-  console.log('[DEBUG] applyPlaylistFixes: request body', { session, playlistUrl, replacements });
+  console.log('[DEBUG] applyPlaylistFixes: request body', { session, playlistUrl, replacements, options });
   
   const res = await fetch(url, {
     method: "POST",
@@ -172,7 +177,11 @@ export async function applyPlaylistFixes(session: string, playlistUrl: string, r
     body: JSON.stringify({
       session,
       playlistUrl,
-      replacements
+      replacements,
+      // Advanced editor playlist metadata (optional)
+      playlistName: options?.playlistName,
+      playlistDescription: options?.playlistDescription,
+      isPublic: options?.isPublic,
     })
   });
   
