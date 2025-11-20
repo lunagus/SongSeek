@@ -85,7 +85,8 @@ global.userSessions = userSessions;
 
 // Middleware
 app.use(cookieParser());
-app.use(express.json()); // Add JSON body parsing
+// Allow larger JSON bodies for operations like Spotify account import
+app.use(express.json({ limit: '25mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // CORS middleware to allow frontend requests
