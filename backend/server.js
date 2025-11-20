@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import cookieParser from 'cookie-parser';
+import fetch from 'node-fetch';
 
 // Robust .env loading with multiple fallback paths
 const __filename = fileURLToPath(import.meta.url);
@@ -1399,9 +1400,8 @@ app.get('/convert-web-playlist', async (req, res) => {
       error: err.message,
       current: 0,
       total: 0,
-      tracks: []
+      tracks: [],
     });
-    
     res.status(500).json({ 
       error: `Error converting ${sourcePlatform} playlist`,
       message: err.message 
