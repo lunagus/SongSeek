@@ -1,14 +1,19 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
 import AdvancedPlaylistCreator from "@/components/advanced-playlist-creator";
 
-export default function AdvancedPage() {
-  const searchParams = useSearchParams();
-  const session = searchParams.get("session") || "";
-  const sourcePlatform = searchParams.get("source") || "spotify";
-  const targetPlatform = searchParams.get("target") || "spotify";
-  const initialPlaylistName = searchParams.get("name") || undefined;
+interface AdvancedPageProps {
+  searchParams?: {
+    session?: string;
+    source?: string;
+    target?: string;
+    name?: string;
+  };
+}
+
+export default function AdvancedPage({ searchParams }: AdvancedPageProps) {
+  const session = searchParams?.session || "";
+  const sourcePlatform = searchParams?.source || "spotify";
+  const targetPlatform = searchParams?.target || "spotify";
+  const initialPlaylistName = searchParams?.name || undefined;
 
   if (!session) {
     return (

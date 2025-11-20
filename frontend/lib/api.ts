@@ -1,6 +1,8 @@
 // API utility for SongSeek backend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL!;
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://backend--songseek--76cv6f4p49vv.code.run";
 
 // Type definitions
 export interface TrackConversionResult {
