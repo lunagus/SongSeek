@@ -2,11 +2,10 @@
 [![Build Status](https://img.shields.io/github/deployments/lunagus/SongSeek/production?label=build&color=brightgreen)](https://github.com/lunagus/SongSeek/deployments)
 [![Vercel](https://img.shields.io/badge/deployed%20on-Vercel-black?logo=vercel)](https://songseek.vercel.app/)
 ![Express](https://img.shields.io/badge/Express-5.1.0-black?logo=express)
-![Node.js](https://img.shields.io/badge/Node.js-22.14.0-green?logo=node.js)
+![React](https://img.shields.io/badge/React-19.1.0-blue?logo=react)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6-yellow?logo=javascript)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.1-blue?logo=typescript)
-![React](https://img.shields.io/badge/React-19.1.0-blue?logo=react)
-![Next.js](https://img.shields.io/badge/Next.js-15.4.1-black?logo=next.js)
+
 ---
 
 ## 💭 WHY?
@@ -25,7 +24,7 @@ I got tired of trying to find a suitable tool that would let me convert large De
 4. Watch your playlist convert in real-time!
 5. Use manual fixes if any tracks don't match perfectly.
 
-Want to run it locally or contribute? See [Contributing](#-contributing) below.
+Want to run it locally or contribute? See [contributing](#-contributing) below.
 
 ---
 
@@ -49,11 +48,11 @@ Want to run it locally or contribute? See [Contributing](#-contributing) below.
 | Source        | Target(s)                | Supported |
 |---------------|--------------------------|-----------|
 | Spotify       | YouTube Music, Deezer    | ✅        |
-| YouTube Music | Spotify, Deezer          | ✅        |
-| Deezer        | Spotify, YouTube Music   | ✅        |
-| Apple Music   | Spotify, YouTube Music   | ✅        |
-| Tidal         | Spotify, YouTube Music   | ✅        |
-| Amazon Music  | Spotify, YouTube Music   | ✅        |
+| YouTube Music   | Spotify, Deezer          | ✅        |
+| Deezer        | Spotify, YouTube Music, Deezer   | ✅        |
+| Apple Music   | Spotify, YouTube Music, Deezer   | ✅        |
+| Tidal         | Spotify, YouTube Music, Deezer   | ✅        |
+| Amazon Music  | Spotify, YouTube Music, Deezer   | ✅        |
 
 ### 🎧 Track-by-Track Conversion
 - One-click track conversions between all platforms
@@ -117,9 +116,9 @@ Want to run it locally or contribute? See [Contributing](#-contributing) below.
 | Feature                    | Status        |
 |----------------------------|---------------|
 | Deezer Export w/ OAuth     | ⏳ Waiting |
-| Apple Music Export         | 🧩 Researching |
 | Bulk Upload via File       | 🔜 Planned     |
-| UI for Failed Matches Fix  | 🔜 Planned     |
+| UI for Advanced Options  | 🔜 Planned     |
+| Social Media integration   | 🔜 Planned     |
 
 ---
 
