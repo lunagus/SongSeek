@@ -78,6 +78,7 @@ const port = process.env.PORT || 8080;
 const userSessions = new Map(); // key = sessionId (state), value = { accessToken, refreshToken }
 const progressMap = new Map(); // key = sessionId, value = { total, current, stage, error }
 const conversionResultsMap = new Map(); // key = sessionId, value = { matched, skipped, mismatched, playlistUrl }
+const backupProgressMap = new Map(); // key = sessionId, value = { type, stage, playlistsCurrent, playlistsTotal, tracksCurrent, tracksTotal }
 
 // Make userSessions globally accessible for search service
 global.userSessions = userSessions;
@@ -263,6 +264,7 @@ app.post('/deezer/validate-arl', async (req, res) => {
         success: false, 
         error: validation.error 
       });
+      playlistsProcessed += 1;
     }
   } catch (error) {
     console.error('[DEBUG] Unexpected error in /deezer/validate-arl endpoint:');
@@ -345,6 +347,26 @@ app.get('/progress/:session', (req, res) => {
   };
 
   // Send initial progress
+  sendProgress();
+  const interval = setInterval(sendProgress, 1000);
+
+  req.on('close', () => {
+    clearInterval(interval);
+  });
+});
+
+// SSE endpoint for backup/import progress
+app.get('/backup-progress/:session', (req, res) => {
+  const session = req.params.session;
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendProgress = () => {
+    const progress = backupProgressMap.get(session) || {};
+    res.write(`data: ${JSON.stringify(progress)}\n\n`);
+  };
+
   sendProgress();
   const interval = setInterval(sendProgress, 1000);
 
@@ -1543,8 +1565,19 @@ app.get('/spotify/export-account', async (req, res) => {
       playlistsUrl = page.next;
     }
 
+    backupProgressMap.set(session, {
+      type: 'export',
+      stage: 'Fetching playlists',
+      playlistsCurrent: 0,
+      playlistsTotal: playlists.length,
+      tracksCurrent: 0,
+      tracksTotal: 0,
+    });
+
     // Fetch tracks for each playlist
     const playlistsWithTracks = [];
+    let playlistsProcessed = 0;
+    let tracksProcessed = 0;
     for (const p of playlists) {
       const tracks = [];
       let tracksUrl = `https://api.spotify.com/v1/playlists/${p.id}/tracks?limit=100`;
@@ -1559,6 +1592,15 @@ app.get('/spotify/export-account', async (req, res) => {
               name: t.name,
               artists: (t.artists || []).map((a) => a.name),
               album: t.album?.name,
+            });
+            tracksProcessed += 1;
+            backupProgressMap.set(session, {
+              type: 'export',
+              stage: 'Exporting playlists',
+              playlistsCurrent: playlistsProcessed,
+              playlistsTotal: playlists.length,
+              tracksCurrent: tracksProcessed,
+              tracksTotal: 0, // will be updated once saved tracks are known
             });
           }
         }
@@ -1593,6 +1635,15 @@ app.get('/spotify/export-account', async (req, res) => {
       }
       savedUrl = page.next;
     }
+
+    backupProgressMap.set(session, {
+      type: 'export',
+      stage: 'Finalizing export',
+      playlistsCurrent: playlistsProcessed,
+      playlistsTotal: playlists.length,
+      tracksCurrent: tracksProcessed + savedTracks.length,
+      tracksTotal: tracksProcessed + savedTracks.length,
+    });
 
     const backup = {
       exportedAt: new Date().toISOString(),
@@ -1682,6 +1733,19 @@ app.post('/spotify/import-account', async (req, res) => {
     let savedTracksImported = 0;
 
     const playlists = Array.isArray(backup.playlists) ? backup.playlists : [];
+    const totalPlaylists = playlists.length;
+    const savedTracks = Array.isArray(backup.savedTracks) ? backup.savedTracks : [];
+    const savedIds = savedTracks.map((t) => t.id).filter(Boolean);
+
+    backupProgressMap.set(session, {
+      type: 'import',
+      stage: 'Creating playlists',
+      playlistsCurrent: 0,
+      playlistsTotal: totalPlaylists,
+      tracksCurrent: 0,
+      tracksTotal: savedIds.length,
+    });
+
     for (const p of playlists) {
       const created = await spotifyPost(`https://api.spotify.com/v1/users/${me.id}/playlists`, {
         name: p.name || 'Imported playlist',
@@ -1703,10 +1767,24 @@ app.post('/spotify/import-account', async (req, res) => {
       }
 
       playlistsImported += 1;
+      backupProgressMap.set(session, {
+        type: 'import',
+        stage: 'Creating playlists',
+        playlistsCurrent: playlistsImported,
+        playlistsTotal: totalPlaylists,
+        tracksCurrent: savedTracksImported,
+        tracksTotal: savedIds.length,
+      });
     }
 
-    const savedTracks = Array.isArray(backup.savedTracks) ? backup.savedTracks : [];
-    const savedIds = savedTracks.map((t) => t.id).filter(Boolean);
+    backupProgressMap.set(session, {
+      type: 'import',
+      stage: 'Restoring saved tracks',
+      playlistsCurrent: playlistsImported,
+      playlistsTotal: totalPlaylists,
+      tracksCurrent: 0,
+      tracksTotal: savedIds.length,
+    });
     for (let i = 0; i < savedIds.length; i += 50) {
       const chunk = savedIds.slice(i, i + 50);
       if (chunk.length === 0) continue;
@@ -1714,6 +1792,14 @@ app.post('/spotify/import-account', async (req, res) => {
         ids: chunk,
       });
       savedTracksImported += chunk.length;
+      backupProgressMap.set(session, {
+        type: 'import',
+        stage: 'Restoring saved tracks',
+        playlistsCurrent: playlistsImported,
+        playlistsTotal: totalPlaylists,
+        tracksCurrent: savedTracksImported,
+        tracksTotal: savedIds.length,
+      });
     }
 
     res.json({

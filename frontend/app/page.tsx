@@ -37,7 +37,7 @@ import { MusicWaveAnimation } from "@/components/music-wave-animation"
 import { FeedbackModal } from "@/components/feedback-modal"
 import { trackEvent, trackConversion, trackError } from "@/lib/analytics"
 import type { JSX } from "react/jsx-runtime"
-import { getOAuthUrl, convertDeezerToSpotify, convertSpotifyToYouTube, convertSpotifyToDeezer, convertYouTubeToSpotify, convertYouTubeToDeezer, listenToProgress, getConversionResults, convertTrack, convertWebPlaylist, validateDeezerARL, exportSpotifyAccount, importSpotifyAccount } from "@/lib/api";
+import { getOAuthUrl, listenToProgress, listenToBackupProgress, convertDeezerToSpotify, convertSpotifyToYouTube, convertYouTubeToSpotify, convertWebPlaylist, getConversionResults, convertTrack, exportSpotifyAccount, importSpotifyAccount, validateDeezerARL } from "@/lib/api"
 import {
   SpotifyIcon,
   YouTubeMusicIcon,
@@ -124,6 +124,8 @@ export default function SongSeekApp() {
   const [backupFileName, setBackupFileName] = useState<string | null>(null)
   const [backupSummary, setBackupSummary] = useState<{ playlists: number; tracks: number } | null>(null)
   const [isBackupProcessing, setIsBackupProcessing] = useState(false)
+  const [backupProgress, setBackupProgress] = useState<any | null>(null)
+  const backupEventSourceRef = useRef<EventSource | null>(null)
   const router = useRouter()
 
   // Check session validity with backend
@@ -1324,6 +1326,10 @@ export default function SongSeekApp() {
       });
     } finally {
       setIsBackupProcessing(false);
+      if (backupEventSourceRef.current) {
+        backupEventSourceRef.current.close();
+        backupEventSourceRef.current = null;
+      }
     }
   };
 
@@ -1377,6 +1383,13 @@ export default function SongSeekApp() {
     }
     try {
       setIsBackupProcessing(true);
+
+      if (!backupEventSourceRef.current) {
+        backupEventSourceRef.current = listenToBackupProgress(session, (progress) => {
+          setBackupProgress(progress);
+        });
+      }
+
       await importSpotifyAccount(session, backupData);
       toast({
         title: "Spotify Backup Imported",
@@ -1585,35 +1598,24 @@ export default function SongSeekApp() {
                 </div>
               </div>
 
-              {/* Convert Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3">
+              {/* Convert Button */}
+              <div className="flex">
                 <Button
                   onClick={() => handlePlaylistConvert("quick")}
                   disabled={isConverting || !playlistLink.trim()}
-                  className="flex-1 h-12 sm:h-14 lg:h-16 text-base sm:text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full h-12 sm:h-14 lg:h-16 text-base sm:text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isConverting ? (
                     <div className="flex items-center gap-3">
                       <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
-                      <span>Quick Conversion...</span>
+                      <span>Transferring playlist...</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3">
                       <Music className="h-5 w-5 sm:h-6 sm:w-6" />
-                      <span>Quick Conversion</span>
+                      <span>Transfer Playlist</span>
                     </div>
                   )}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handlePlaylistConvert("advanced")}
-                  disabled={isConverting || !playlistLink.trim()}
-                  className="flex-1 h-12 sm:h-14 lg:h-16 text-base sm:text-lg font-semibold border-2 border-purple-400 text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-900 hover:bg-purple-50 dark:hover:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <div className="flex items-center gap-3">
-                    <Settings className="h-5 w-5 sm:h-6 sm:w-6" />
-                    <span>Advanced Conversion</span>
-                  </div>
                 </Button>
               </div>
             </CardContent>
@@ -1659,6 +1661,27 @@ export default function SongSeekApp() {
                     Download a JSON backup of all your playlists and saved tracks.
                   </p>
 
+                  {backupProgress && backupProgress.type === "export" && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {backupProgress.stage || "Exporting..."}
+                      </p>
+                      <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                        {(() => {
+                          const total = backupProgress.tracksTotal || backupProgress.playlistsTotal || 0;
+                          const current = backupProgress.tracksCurrent || backupProgress.playlistsCurrent || 0;
+                          const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+                          return (
+                            <div
+                              className="h-full bg-gradient-to-r from-sky-500 to-blue-600 transition-all duration-300"
+                              style={{ width: `${percent}%` }}
+                            />
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
                   <Button
                     onClick={handleSpotifyExport}
                     disabled={isBackupProcessing}
@@ -1671,6 +1694,26 @@ export default function SongSeekApp() {
                       </div>
                     ) : (
                       <span>Export as JSON</span>
+                    )}
+                    {backupProgress && backupProgress.type === "import" && (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {backupProgress.stage || "Importing..."}
+                        </p>
+                        <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                          {(() => {
+                            const total = backupProgress.tracksTotal || backupProgress.playlistsTotal || 0;
+                            const current = backupProgress.tracksCurrent || backupProgress.playlistsCurrent || 0;
+                            const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+                            return (
+                              <div
+                                className="h-full bg-gradient-to-r from-purple-500 to-pink-600 transition-all duration-300"
+                                style={{ width: `${percent}%` }}
+                              />
+                            );
+                          })()}
+                        </div>
+                      </div>
                     )}
                   </Button>
                 </div>

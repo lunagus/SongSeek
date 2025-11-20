@@ -225,6 +225,19 @@ export function listenToProgress(session: string, onProgress: (progress: any) =>
   return eventSource;
 } 
 
+// Backup/import progress via SSE
+export function listenToBackupProgress(session: string, onProgress: (progress: any) => void) {
+  const url = `${API_BASE_URL}/backup-progress/${encodeURIComponent(session)}`;
+  const eventSource = new EventSource(url);
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onProgress(data);
+    } catch {}
+  };
+  return eventSource;
+}
+
 // Spotify account backup/export
 export async function exportSpotifyAccount(session: string) {
   const url = `${API_BASE_URL}/spotify/export-account?session=${encodeURIComponent(session)}`;

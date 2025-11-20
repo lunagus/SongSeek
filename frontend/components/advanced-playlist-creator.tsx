@@ -714,10 +714,18 @@ https://music.youtube.com/playlist/...`}
                         className={`transition-all duration-200 hover:shadow-lg ${
                           selectedSongs.includes(song.id) ? "ring-2 ring-blue-500 shadow-md" : ""
                         } ${draggedItem === song.id ? "opacity-50" : ""} ${
-                          song.status === "not_found" ? "border-red-200 bg-red-50/50" : ""
-                        } ${song.status === "needs_review" ? "border-orange-200 bg-orange-50/50" : ""} ${
-                          song.isDuplicate ? "border-purple-200 bg-purple-50/50" : ""
-                        } border-0 shadow-sm bg-white/90 backdrop-blur`}
+                          song.status === "not_found"
+                            ? "border-red-200 bg-red-50/50 dark:border-red-500/40 dark:bg-red-900/40"
+                            : ""
+                        } ${
+                          song.status === "needs_review"
+                            ? "border-orange-200 bg-orange-50/50 dark:border-orange-500/40 dark:bg-orange-900/40"
+                            : ""
+                        } ${
+                          song.isDuplicate
+                            ? "border-purple-200 bg-purple-50/50 dark:border-purple-500/40 dark:bg-purple-900/40"
+                            : ""
+                        } border-0 shadow-sm bg-white/90 dark:bg-gray-800/80 backdrop-blur-sm`}
                         draggable
                         onDragStart={(e) => handleDragStart(e, song.id)}
                         onDragOver={handleDragOver}

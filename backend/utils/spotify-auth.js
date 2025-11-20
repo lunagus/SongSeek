@@ -9,7 +9,20 @@ const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
 
 export function getSpotifyLoginUrl(state) {
-  const scope = 'playlist-modify-public playlist-modify-private';
+  // Scopes needed for full backup/restore:
+  // - playlist-modify-public / playlist-modify-private: create & edit playlists
+  // - playlist-read-private / playlist-read-collaborative: read all user playlists
+  // - user-library-read / user-library-modify: read & restore saved tracks
+  // - user-follow-read: (optional) read followed artists/shows if we support it later
+  const scope = [
+    'playlist-modify-public',
+    'playlist-modify-private',
+    'playlist-read-private',
+    'playlist-read-collaborative',
+    'user-library-read',
+    'user-library-modify',
+    'user-follow-read',
+  ].join(' ');
 
   const params = querystring.stringify({
     response_type: 'code',
