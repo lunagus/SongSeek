@@ -72,7 +72,7 @@ export function OnboardingFlow({ isOpen, onClose, onComplete }: OnboardingFlowPr
           <div className="space-y-4">
             <h3 className="text-2xl font-bold">Transform Your Music Collection</h3>
             <p className="text-gray-600 dark:text-gray-300 text-lg leading-relaxed">
-              Convert playlists between Spotify, YouTube Music, Apple Music, and more with intelligent track matching.
+              Convert playlists between Spotify, YouTube Music, Deezer, and more with intelligent track matching.
             </p>
             <div className="flex flex-wrap justify-center gap-2 mt-4">
               <Badge variant="secondary" className="gap-1">

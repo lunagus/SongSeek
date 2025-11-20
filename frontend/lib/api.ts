@@ -214,6 +214,34 @@ export function listenToProgress(session: string, onProgress: (progress: any) =>
   return eventSource;
 } 
 
+// Spotify account backup/export
+export async function exportSpotifyAccount(session: string) {
+  const url = `${API_BASE_URL}/spotify/export-account?session=${encodeURIComponent(session)}`;
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to export Spotify account: ${errorText}`);
+  }
+  return await res.json();
+}
+
+// Spotify account restore/import
+export async function importSpotifyAccount(session: string, backup: any) {
+  const url = `${API_BASE_URL}/spotify/import-account?session=${encodeURIComponent(session)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(backup),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to import Spotify account: ${errorText}`);
+  }
+  return await res.json();
+}
+
 // Convert web-scraped playlists (Apple Music, Amazon Music, Tidal) to other platforms
 export async function convertWebPlaylist(link: string, targetPlatform: string, session?: string) {
   const params = new URLSearchParams({

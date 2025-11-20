@@ -25,9 +25,11 @@ import {
   Headphones,
   Radio,
   Send,
+  Settings,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
 import { PlatformBadge } from "@/components/platform-badge"
 import { DragDropZone } from "@/components/drag-drop-zone"
 import { TrackResultDisplay } from "@/components/track-result-display"
@@ -35,7 +37,7 @@ import { MusicWaveAnimation } from "@/components/music-wave-animation"
 import { FeedbackModal } from "@/components/feedback-modal"
 import { trackEvent, trackConversion, trackError } from "@/lib/analytics"
 import type { JSX } from "react/jsx-runtime"
-import { getOAuthUrl, convertDeezerToSpotify, convertSpotifyToYouTube, convertSpotifyToDeezer, convertYouTubeToSpotify, convertYouTubeToDeezer, listenToProgress, getConversionResults, convertTrack, convertWebPlaylist, validateDeezerARL } from "@/lib/api";
+import { getOAuthUrl, convertDeezerToSpotify, convertSpotifyToYouTube, convertSpotifyToDeezer, convertYouTubeToSpotify, convertYouTubeToDeezer, listenToProgress, getConversionResults, convertTrack, convertWebPlaylist, validateDeezerARL, exportSpotifyAccount, importSpotifyAccount } from "@/lib/api";
 import {
   SpotifyIcon,
   YouTubeMusicIcon,
@@ -105,10 +107,6 @@ export default function SongSeekApp() {
   const [isConverting, setIsConverting] = useState(false)
   const [feedback, setFeedback] = useState("")
   const [feedbackType, setFeedbackType] = useState<"error" | "warning" | "info">("error")
-  const [showProgress, setShowProgress] = useState(false)
-  const [conversionResults, setConversionResults] = useState<ConversionResult | null>(null)
-  const [showResults, setShowResults] = useState(false)
-  const [trackConversionResult, setTrackConversionResult] = useState<TrackConversionResult | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isFirstVisit, setIsFirstVisit] = useState(false)
   const [currentSession, setCurrentSession] = useState<string | undefined>(undefined)
@@ -117,11 +115,16 @@ export default function SongSeekApp() {
   const { toast } = useToast()
   const { theme, setTheme } = useTheme()
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
-  const progressClosedRef = useRef(false);
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const progressClosedRef = useRef(false)
+  const [conversionResults, setConversionResults] = useState<ConversionResult | null>(null)
+  const [showProgress, setShowProgress] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const [trackConversionResult, setTrackConversionResult] = useState<TrackConversionResult | null>(null)
+  const [backupData, setBackupData] = useState<any | null>(null)
+  const [backupFileName, setBackupFileName] = useState<string | null>(null)
+  const [backupSummary, setBackupSummary] = useState<{ playlists: number; tracks: number } | null>(null)
+  const [isBackupProcessing, setIsBackupProcessing] = useState(false)
+  const router = useRouter()
 
   // Check session validity with backend
   async function checkSessionValidity(platform: string, sessionKey: string) {
@@ -146,6 +149,10 @@ export default function SongSeekApp() {
       return false;
     }
   }
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     // Track page view
@@ -756,7 +763,7 @@ export default function SongSeekApp() {
     }
   }
 
-  const handlePlaylistConvert = async () => {
+  const handlePlaylistConvert = async (mode: "quick" | "advanced" = "quick") => {
     if (!playlistLink.trim()) {
       showDetailedFeedback("invalid_link");
       return;
@@ -764,6 +771,16 @@ export default function SongSeekApp() {
     const sourcePlatform = detectPlatform(playlistLink);
     if (!sourcePlatform) {
       showDetailedFeedback("invalid_link");
+      return;
+    }
+    if (sourcePlatform === playlistTarget && sourcePlatform !== "spotify") {
+      setFeedback("Source and target platforms are the same. Please choose a different target platform.");
+      setFeedbackType("warning");
+      toast({
+        variant: "destructive",
+        title: "Invalid Conversion",
+        description: `Conversion from ${sourcePlatform} to ${playlistTarget} is not necessary. Please select a different target platform.`,
+      });
       return;
     }
     const targetPlatformKey = playlistTarget === "ytmusic" ? "youtube" : (playlistTarget as keyof LoginStatus);
@@ -864,6 +881,18 @@ export default function SongSeekApp() {
           // Progress updates handled by ConversionProgress component
         });
         
+        conversionResponse = await convertWebPlaylist(playlistLink, "spotify", session);
+        // Always use the session you passed in for polling
+        setCurrentSession(conversionResponse.session || session);
+      }
+      // Spotify playlist cloning (Spotify -> Spotify)
+      else if (sourcePlatform === "spotify" && playlistTarget === "spotify") {
+        const session = localStorage.getItem("spotify_session") || undefined;
+        if (!session) throw new Error("No Spotify session found. Please login to Spotify first.");
+        setCurrentSession(session);
+        eventSource = listenToProgress(session, (progress) => {
+          // Progress updates handled by ConversionProgress component
+        });
         conversionResponse = await convertWebPlaylist(playlistLink, "spotify", session);
         // Always use the session you passed in for polling
         setCurrentSession(conversionResponse.session || session);
@@ -1022,11 +1051,19 @@ export default function SongSeekApp() {
           setShowProgress(false);
           return;
         }
-        setCurrentSession(sessionToUse);
-        const results = await getConversionResults(sessionToUse);
-        setConversionResults(results);
-        console.log('[DEBUG] setConversionResults for session', sessionToUse, results);
-        setShowResults(true);
+        if (mode === "advanced") {
+          router.push(
+            `/advanced?session=${encodeURIComponent(sessionToUse)}&source=${encodeURIComponent(
+              sourcePlatform,
+            )}&target=${encodeURIComponent(playlistTarget)}`,
+          )
+        } else {
+          setCurrentSession(sessionToUse);
+          const results = await getConversionResults(sessionToUse);
+          setConversionResults(results);
+          console.log('[DEBUG] setConversionResults for session', sessionToUse, results);
+          setShowResults(true);
+        }
 
         // Show success message
         toast({
@@ -1240,6 +1277,116 @@ export default function SongSeekApp() {
     }
   };
 
+  const handleSpotifyExport = async () => {
+    const session = localStorage.getItem("spotify_session") || undefined;
+    if (!session) {
+      toast({
+        variant: "destructive",
+        title: "Spotify Not Connected",
+        description: "Please connect your Spotify account first.",
+      });
+      return;
+    }
+    try {
+      setIsBackupProcessing(true);
+      const backup = await exportSpotifyAccount(session);
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const timestamp = new Date();
+      const fileName = `songseek-spotify-backup-${timestamp.getFullYear()}_${
+        timestamp.getMonth() + 1
+      }_${timestamp.getDate()}.json`;
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Spotify Backup Exported",
+        description: "Your Spotify account backup has been downloaded.",
+      });
+    } catch (error) {
+      console.error("Spotify export error:", error);
+      toast({
+        variant: "destructive",
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Failed to export Spotify account.",
+      });
+    } finally {
+      setIsBackupProcessing(false);
+    }
+  };
+
+  const handleBackupFileChange = async (event: any) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBackupFileName(file.name);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const playlists = Array.isArray(data.playlists) ? data.playlists.length : 0;
+      const tracks = Array.isArray(data.playlists)
+        ? data.playlists.reduce((sum: number, p: any) => sum + (Array.isArray(p.tracks) ? p.tracks.length : 0), 0)
+        : 0;
+      const savedTracks = Array.isArray(data.savedTracks) ? data.savedTracks.length : 0;
+      setBackupData(data);
+      setBackupSummary({ playlists, tracks: tracks + savedTracks });
+      toast({
+        title: "Backup File Loaded",
+        description: `Playlists: ${playlists}, Tracks (including saved): ${tracks + savedTracks}`,
+      });
+    } catch (error) {
+      console.error("Backup file parse error:", error);
+      setBackupData(null);
+      setBackupSummary(null);
+      toast({
+        variant: "destructive",
+        title: "Invalid Backup File",
+        description: "Please select a valid SongSeek Spotify backup JSON file.",
+      });
+    }
+  };
+
+  const handleSpotifyImport = async () => {
+    if (!backupData) {
+      toast({
+        variant: "destructive",
+        title: "No Backup Loaded",
+        description: "Please select a backup JSON file first.",
+      });
+      return;
+    }
+    const session = localStorage.getItem("spotify_session") || undefined;
+    if (!session) {
+      toast({
+        variant: "destructive",
+        title: "Spotify Not Connected",
+        description: "Please connect your Spotify account first.",
+      });
+      return;
+    }
+    try {
+      setIsBackupProcessing(true);
+      await importSpotifyAccount(session, backupData);
+      toast({
+        title: "Spotify Backup Imported",
+        description: "Your Spotify playlists and saved tracks are being restored.",
+      });
+    } catch (error) {
+      console.error("Spotify import error:", error);
+      toast({
+        variant: "destructive",
+        title: "Import Failed",
+        description: error instanceof Error ? error.message : "Failed to import Spotify account.",
+      });
+    } finally {
+      setIsBackupProcessing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors duration-300">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 max-w-6xl">
@@ -1431,24 +1578,135 @@ export default function SongSeekApp() {
                 </div>
               </div>
 
-              {/* Convert Button */}
-              <Button
-                onClick={handlePlaylistConvert}
-                disabled={isConverting || !playlistLink.trim()}
-                className="w-full h-12 sm:h-14 lg:h-16 text-base sm:text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isConverting ? (
+              {/* Convert Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  onClick={() => handlePlaylistConvert("quick")}
+                  disabled={isConverting || !playlistLink.trim()}
+                  className="flex-1 h-12 sm:h-14 lg:h-16 text-base sm:text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isConverting ? (
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
+                      <span>Quick Conversion...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <Music className="h-5 w-5 sm:h-6 sm:w-6" />
+                      <span>Quick Conversion</span>
+                    </div>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handlePlaylistConvert("advanced")}
+                  disabled={isConverting || !playlistLink.trim()}
+                  className="flex-1 h-12 sm:h-14 lg:h-16 text-base sm:text-lg font-semibold border-2 border-purple-400 text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-900 hover:bg-purple-50 dark:hover:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
-                    <span>Converting...</span>
+                    <Settings className="h-5 w-5 sm:h-6 sm:w-6" />
+                    <span>Advanced Conversion</span>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <Music className="h-5 w-5 sm:h-6 sm:w-6" />
-                    <span>Convert Playlist</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Backup & Restore (Spotify) */}
+          <Card className="shadow-xl border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+            <CardHeader className="px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg">
+                  <Cloud className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    Backup &amp; Restore
+                  </CardTitle>
+                  <CardDescription className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+                    Export your music library to JSON or restore it on another account or device
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <Label className="text-lg font-semibold text-gray-900 dark:text-white">Export Account</Label>
+
+                  {/* Platform Access for Spotify */}
+                  <Button
+                    onClick={() => handleLogin("spotify")}
+                    disabled={loginStatus.spotify}
+                    className={`w-full h-11 sm:h-12 text-base font-semibold rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg transition-all duration-200 ${
+                      loginStatus.spotify ? "opacity-90" : ""
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <SpotifyIcon className="h-5 w-5" />
+                      <span>Connect to Spotify</span>
+                    </div>
+                  </Button>
+
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    Download a JSON backup of all your playlists and saved tracks.
+                  </p>
+
+                  <Button
+                    onClick={handleSpotifyExport}
+                    disabled={isBackupProcessing}
+                    className="w-full h-11 sm:h-12 text-base font-semibold bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-60"
+                  >
+                    {isBackupProcessing ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Processing...</span>
+                      </div>
+                    ) : (
+                      <span>Export as JSON</span>
+                    )}
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-lg font-semibold text-gray-900 dark:text-white">Import Backup</Label>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    Restore playlists and saved tracks from a previously exported backup file.
+                  </p>
+                  <div className="space-y-3">
+                    <Input
+                      type="file"
+                      accept="application/json"
+                      onChange={handleBackupFileChange}
+                      className="h-11 sm:h-12 text-sm rounded-lg border-2 border-gray-200 dark:border-gray-700 cursor-pointer"
+                    />
+                    {backupFileName && (
+                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                        <div className="font-medium break-all">File: {backupFileName}</div>
+                        {backupSummary && (
+                          <div>
+                            Playlists: {backupSummary.playlists} · Tracks (incl. saved): {backupSummary.tracks}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleSpotifyImport}
+                      disabled={isBackupProcessing || !backupData}
+                      className="w-full h-11 sm:h-12 text-base font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-60"
+                    >
+                      {isBackupProcessing ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Importing...</span>
+                        </div>
+                      ) : (
+                        <span>Import Backup</span>
+                      )}
+                    </Button>
                   </div>
-                )}
-              </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
