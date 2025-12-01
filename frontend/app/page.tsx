@@ -131,7 +131,10 @@ export default function SongSeekApp() {
   // Check session validity with backend
   async function checkSessionValidity(platform: string, sessionKey: string) {
     if (!sessionKey) return false;
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL!;
+    const backendUrl =
+      platform === 'youtube'
+        ? (process.env.NEXT_PUBLIC_YT_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL!)
+        : process.env.NEXT_PUBLIC_BACKEND_URL!;
     try {
       const res = await fetch(`${backendUrl}/api/check-session?platform=${platform}&session=${sessionKey}`, {
         credentials: 'include'
