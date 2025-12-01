@@ -37,7 +37,7 @@ export default function LoginSuccess() {
   useEffect(() => {
     // Accept both 'session' and 'spotify_session' for Spotify
     const spotifySession = searchParams.get("spotify_session") || searchParams.get("session");
-    const ytSession = searchParams.get("yt_session");
+    const ytSession = searchParams.get("yt_session") || searchParams.get("youtube_session");
     const deezerSession = searchParams.get("deezer_session");
     const appleSession = searchParams.get("apple_session");
 
