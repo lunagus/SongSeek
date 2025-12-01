@@ -4,6 +4,10 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://backend--songseek--76cv6f4p49vv.code.run";
 
+const YT_BACKEND_URL =
+  process.env.NEXT_PUBLIC_YT_BACKEND_URL ||
+  "https://songseek.onrender.com";
+
 // Type definitions
 export interface TrackConversionResult {
   sourceTrack: {
@@ -33,7 +37,7 @@ export function getOAuthUrl(platform: string) {
     case "youtube":
     case "ytmusic":
     case "yt":
-      return `${API_BASE_URL}/youtube/login`;
+      return `${YT_BACKEND_URL}/youtube/login`;
     case "deezer":
       return `${API_BASE_URL}/deezer/login`;
     default:
@@ -75,6 +79,15 @@ export async function convertYouTubeToSpotify(link: string, session: string) {
 
 export async function convertYouTubeToDeezer(playlistId: string, ytSession: string) {
   const url = `${API_BASE_URL}/convert-youtube-to-deezer?playlistId=${encodeURIComponent(playlistId)}&ytSession=${encodeURIComponent(ytSession)}`;
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data;
+}
+
+export async function convertDeezerToYouTube(link: string, ytSession: string) {
+  const baseUrl = YT_BACKEND_URL || API_BASE_URL;
+  const url = `${baseUrl}/convert-deezer-to-youtube?link=${encodeURIComponent(link)}&ytSession=${encodeURIComponent(ytSession)}`;
   const res = await fetch(url, { method: "GET" });
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();

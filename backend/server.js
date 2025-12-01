@@ -69,6 +69,7 @@ import { convertSpotifyToYouTubePlaylist } from './mappers/spotify-to-youtube-pl
 import resolveSpotifyPlaylist from './resolvers/spotify-playlist-resolver.js';
 import resolveYouTubePlaylist from './resolvers/youtube-playlist-scraper.js';
 import { convertYouTubeToSpotifyPlaylist } from './mappers/youtube-to-spotify-playlist-mapper.js';
+import { convertDeezerToYouTubePlaylist } from './mappers/deezer-to-youtube-playlist-mapper.js';
 
 dotenv.config();
 
@@ -154,6 +155,122 @@ app.get('/callback', async (req, res) => {
   } catch (err) {
     console.error('OAuth callback error:', err);
     res.status(500).send('Authentication failed');
+  }
+});
+
+// Convert Deezer playlist to YouTube playlist
+app.get('/convert-deezer-to-youtube', async (req, res) => {
+  const { link, ytSession } = req.query;
+  const sessionData = userSessions.get(ytSession);
+
+  if (!sessionData?.accessToken) {
+    return res.status(401).send('User not authenticated with YouTube');
+  }
+
+  try {
+    // Extract URL from text that might contain additional content
+    const { extractUrlFromText } = await import('./utils/url-extractor.js');
+    const extractedUrl = extractUrlFromText(link);
+
+    if (!extractedUrl) {
+      return res.status(400).json({
+        error: 'No valid music platform URL found in the provided text',
+        providedText: link
+      });
+    }
+
+    console.log(`Extracted Deezer playlist URL for YouTube conversion: ${extractedUrl}`);
+
+    progressMap.set(ytSession, {
+      stage: 'Fetching Deezer playlist...',
+      current: 0,
+      total: 0,
+      tracks: []
+    });
+
+    const { name, tracks } = await resolveDeezerPlaylist(extractedUrl);
+
+    const trackProgress = tracks.map(track => ({
+      title: track.title,
+      artist: track.artist,
+      status: 'pending'
+    }));
+
+    progressMap.set(ytSession, {
+      stage: 'Searching tracks on YouTube...',
+      current: 0,
+      total: tracks.length,
+      tracks: trackProgress
+    });
+
+    const youtubeUrl = await convertDeezerToYouTubePlaylist(
+      sessionData.accessToken,
+      name,
+      tracks,
+      (current, trackInfo) => {
+        if (trackInfo) {
+          const trackIndex = trackProgress.findIndex(t =>
+            t.title === trackInfo.title && t.artist === trackInfo.artist
+          );
+          if (trackIndex !== -1) {
+            trackProgress[trackIndex].status = trackInfo.found ? 'success' : 'failed';
+          }
+        } else {
+          for (let i = 0; i < current && i < trackProgress.length; i++) {
+            trackProgress[i].status = 'success';
+          }
+        }
+        progressMap.set(ytSession, {
+          stage: 'Adding tracks to YouTube playlist...',
+          current,
+          total: tracks.length,
+          tracks: trackProgress
+        });
+      }
+    );
+
+    progressMap.set(ytSession, {
+      stage: 'Done',
+      current: tracks.length,
+      total: tracks.length,
+      tracks: trackProgress
+    });
+
+    const matched = trackProgress.filter(track => track.status === 'success').map(track => ({
+      title: track.title,
+      artist: track.artist,
+      status: 'success'
+    }));
+
+    const skipped = trackProgress.filter(track => track.status === 'failed').map(track => ({
+      title: track.title,
+      artist: track.artist,
+      reason: 'Not found on target platform'
+    }));
+
+    const conversionResults = {
+      matched,
+      skipped,
+      mismatched: [],
+      playlistUrl: youtubeUrl,
+      tracks: trackProgress
+    };
+
+    console.log('[DEBUG] SET conversionResultsMap (Deezer->YouTube)', ytSession, JSON.stringify(conversionResults, null, 2));
+    conversionResultsMap.set(ytSession, conversionResults);
+
+    setTimeout(() => progressMap.delete(ytSession), 60000);
+    setTimeout(() => conversionResultsMap.delete(ytSession), 300000);
+
+    res.json({ success: true, session: ytSession, message: 'Conversion completed successfully' });
+  } catch (err) {
+    console.error(err);
+    progressMap.set(ytSession, {
+      stage: 'Error',
+      error: err.message,
+      tracks: []
+    });
+    res.status(500).send('Error converting Deezer playlist to YouTube: ' + err.message);
   }
 });
 

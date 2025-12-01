@@ -37,7 +37,7 @@ import { MusicWaveAnimation } from "@/components/music-wave-animation"
 import { FeedbackModal } from "@/components/feedback-modal"
 import { trackEvent, trackConversion, trackError } from "@/lib/analytics"
 import type { JSX } from "react/jsx-runtime"
-import { getOAuthUrl, listenToProgress, listenToBackupProgress, convertDeezerToSpotify, convertSpotifyToYouTube, convertYouTubeToSpotify, convertWebPlaylist, getConversionResults, convertTrack, exportSpotifyAccount, importSpotifyAccount, validateDeezerARL } from "@/lib/api"
+import { getOAuthUrl, listenToProgress, listenToBackupProgress, convertDeezerToSpotify, convertSpotifyToYouTube, convertYouTubeToSpotify, convertWebPlaylist, getConversionResults, convertTrack, exportSpotifyAccount, importSpotifyAccount, validateDeezerARL, convertDeezerToYouTube } from "@/lib/api"
 import {
   SpotifyIcon,
   YouTubeMusicIcon,
@@ -840,6 +840,19 @@ export default function SongSeekApp() {
         });
         
         conversionResponse = await convertDeezerToSpotify(playlistLink, session);
+      }
+      // Deezer to YouTube Music conversion
+      else if (sourcePlatform === "deezer" && playlistTarget === "ytmusic") {
+        const ytSession = localStorage.getItem("yt_session");
+        if (!ytSession) throw new Error("No YouTube session found. Please login to YouTube first.");
+
+        setCurrentSession(ytSession);
+
+        eventSource = listenToProgress(ytSession, (progress) => {
+          // Progress updates handled by ConversionProgress component
+        });
+
+        conversionResponse = await convertDeezerToYouTube(playlistLink, ytSession);
       }
       // Spotify to YouTube conversion
       else if (sourcePlatform === "spotify" && playlistTarget === "ytmusic") {
