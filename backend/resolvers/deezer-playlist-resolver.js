@@ -12,17 +12,13 @@ export default async function resolveDeezerPlaylist(link) {
   const playlistId = match[1];
   console.log(`Extracted playlist ID: ${playlistId}`);
   
-  // Get the access token from environment variables
+  // Get the access token from environment variables (optional)
   const accessToken = process.env.DEEZER_ACCESS_TOKEN;
-  
-  if (!accessToken) {
-    console.error('Deezer access token is not set in environment variables');
-    throw new Error('Deezer access token is not configured');
-  }
 
   try {
-    // Fetch playlist metadata
-    const apiUrl = `https://api.deezer.com/playlist/${playlistId}?access_token=${accessToken}`;
+    // Fetch playlist metadata (use access token if available, otherwise public API)
+    const baseUrl = `https://api.deezer.com/playlist/${playlistId}`;
+    const apiUrl = accessToken ? `${baseUrl}?access_token=${accessToken}` : baseUrl;
     console.log(`Fetching playlist metadata from: ${apiUrl}`);
     
     const response = await fetch(apiUrl, { 
